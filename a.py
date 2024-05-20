@@ -12,10 +12,20 @@ retry_strategy = Retry(
 
 # HTTP adapter with retry strategy
 adapter = HTTPAdapter(max_retries=retry_strategy)
-session = requests.Session()
-session.mount('https://', adapter)
 
-lay_egg_url = 'https://api.quackquack.games/nest/lay-egg'
+# Create a session with retry and connection pooling
+session = requests.Session()
+session.mount("https://", adapter)
+
+payload = {"type": 1}
+url = 'https://api.quackquack.games/nest/collect'
+url2 = 'https://api.quackquack.games/balance/get'
+url3 = 'https://api.quackquack.games/golden-duck/reward'
+url4 = 'https://api.quackquack.games/golden-duck/claim'
+url_hatch = 'https://api.quackquack.games/nest/hatch'
+collect_url = 'https://api.quackquack.games/nest/collect-duck'
+
+
 
 def read_tokens_nest_ids(filename):
     tokens_nest_ids = []
@@ -23,8 +33,6 @@ def read_tokens_nest_ids(filename):
         for line in file:
             tokens_nest_ids.append(line.strip().split('|'))
     return tokens_nest_ids
-
-tokens_nest_ids = read_tokens_nest_ids('tokens.txt')
 
 def get_nest_ids(session, token):
     headers = {'Authorization': f'Bearer {token}'}
@@ -40,19 +48,19 @@ def get_nest_ids(session, token):
                     response_hatch.raise_for_status()
                     print("Hatch successfully.")
                     time.sleep(1)
-                except requests.exceptions.RequestException as e:
+                except requests.RequestException:
                     pass
             try:
                 collect_duck = session.post('https://api.quackquack.games/nest/collect-duck', json={'nest_id': nest['id']}, headers=headers)
                 collect_duck.raise_for_status()
                 print("collect successfully.")
-            except requests.exceptions.RequestException as e:
+            except requests.RequestException:
                 pass
         return nest_ids
     else:
         return []
 
-def process_nest(token_nest_id, idx):
+def process_nest(session, token_nest_id, idx):
     while True:
         token, *_ = token_nest_id
         nest_ids = get_nest_ids(session, token)
@@ -62,62 +70,49 @@ def process_nest(token_nest_id, idx):
         headers = {'Authorization': f'Bearer {token}'}
         for nest_id in nest_ids:
             data = {'nest_id': nest_id}
-            
             try:
-                response = session.post('https://api.quackquack.games/nest/collect', json=data, headers=headers)
+                response = session.post(url, json=data, headers=headers)
                 response.raise_for_status()
-                
-                response = session.get('https://api.quackquack.games/golden-duck/reward', headers=headers)
+
+                response = session.get(url3, headers=headers)
                 if response.status_code == 200:
                     json_data = response.json()
                     amount = json_data["data"]["amount"]
                     data_type = json_data.get("data", {}).get("type")
-                    
+
                     if data_type == 0:
                         print('\033[91mTrúng cái nịt\033[0m')  # Red color
                     elif data_type == 1:
                         with open('tonclaim.txt', 'a') as file:
                             file.write(f'{idx}-ton-Amount: {amount}\n')
-                        response = session.post('https://api.quackquack.games/golden-duck/claim', json={"type": 2}, headers=headers)
+                        response = session.post(url4, json={"type": 2}, headers=headers)
                         print('\033[94m{}-ton-Amount: {}\033[0m'.format(idx, amount))  # Blue color
                     elif data_type == 2:
-                        response = session.post('https://api.quackquack.games/golden-duck/claim', json=payload, headers=headers)
+                        response = session.post(url4, json=payload, headers=headers)
                         print('\033[92m{}-Pepets-Amount: {}\033[0m'.format(idx, amount))  # Green color
                         with open('pepetsclaim.txt', 'a') as file:
                             file.write(f'{idx}-Pepets-Amount: {amount}\n')
                     elif data_type == 3:
-                        response = session.post('https://api.quackquack.games/golden-duck/claim', json=payload, headers=headers)
+                        response = session.post(url4, json=payload, headers=headers)
                         print('{}-Eggs-Amount: {}'.format(idx, amount))
                     else:
                         pass
 
-                    amount = json_data["data"]["amount"]
-                    if json_data.get("data", {}).get("type") == 0 :
-                        print('Trúng cái nịt')
-                    elif json_data.get("data", {}).get("type") == 1 :
-                        response = session.post('https://api.quackquack.games/golden-duck/claim', json={"type": 2}, headers=headers)
-                        print(f'{idx}-ton-Amount: {amount}')
-                    try:
-                        response = session.post('https://api.quackquack.games/golden-duck/claim', json=payload, headers=headers)
-                        if response.status_code == 200:
-                            print(f'{idx}-Claimed-golden-duck')
-                        else:
-                            pass
-                    except requests.exceptions.RequestException as e:
-                        pass
-                
-                response = session.get('https://api.quackquack.games/balance/get', headers=headers)
+                response = session.get(url2, headers=headers)
                 response_json = response.json()
                 account_data = response_json['data']['data']
                 balance = account_data[2]['balance']
                 print(f"{idx} | TỔNG SỐ TRỨNG VỊT 🐥: {balance}")
-            except requests.exceptions.RequestException as e:
+
+            except requests.RequestException:
                 pass
 
 def main():
     tokens_nest_ids = read_tokens_nest_ids('tokens.txt')
-    for idx, token_nest_id in enumerate(tokens_nest_ids, start=1):
-        process_nest(token_nest_id, idx)
+    with requests.Session() as session:
+        session.mount("https://", adapter)
+        for idx, token_nest_id in enumerate(tokens_nest_ids, start=1):
+            process_nest(session, token_nest_id, idx)
 
 if __name__ == "__main__":
     main()
