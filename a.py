@@ -1,19 +1,20 @@
 import requests
+import threading
 import time
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
-# Retry strategy for requests
+# Strategy để thử lại các yêu cầu
 retry_strategy = Retry(
     total=3,
     backoff_factor=1,
     status_forcelist=[429, 500, 502, 503, 504],
 )
 
-# HTTP adapter with retry strategy
+# Adapter HTTP với chiến lược thử lại
 adapter = HTTPAdapter(max_retries=retry_strategy)
 
-# Create a session with retry and connection pooling
+# Tạo session với thử lại và connection pooling
 session = requests.Session()
 session.mount("https://", adapter)
 
@@ -24,8 +25,6 @@ url3 = 'https://api.quackquack.games/golden-duck/reward'
 url4 = 'https://api.quackquack.games/golden-duck/claim'
 url_hatch = 'https://api.quackquack.games/nest/hatch'
 collect_url = 'https://api.quackquack.games/nest/collect-duck'
-
-
 
 def read_tokens_nest_ids(filename):
     tokens_nest_ids = []
@@ -109,10 +108,15 @@ def process_nest(session, token_nest_id, idx):
 
 def main():
     tokens_nest_ids = read_tokens_nest_ids('tokens.txt')
-    with requests.Session() as session:
-        session.mount("https://", adapter)
-        for idx, token_nest_id in enumerate(tokens_nest_ids, start=1):
-            process_nest(session, token_nest_id, idx)
+    threads = []
+    for idx, token_nest_id in enumerate(tokens_nest_ids, start=1):
+        thread = threading.Thread(target=process_nest, args=(requests.Session(), token_nest_id, idx))
+        thread.start()
+        threads.append(thread)
+    
+    # Chờ tất cả các luồng hoàn thành trước khi kết thúc chương trình
+    for thread in threads:
+        thread.join()
 
 if __name__ == "__main__":
     main()
